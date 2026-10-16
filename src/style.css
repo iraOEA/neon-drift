@@ -178,6 +178,25 @@ html, body {
   flex-shrink: 0;
 }
 
+.pill-signin-btn {
+  background: #d8fd71;
+  color: #292a23;
+  border: 1px solid #292a23;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: 2px;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.pill-signin-btn:hover {
+  background: #bbf043;
+  transform: scale(1.05);
+}
+
 #score-card {
   display: inline-flex;
   align-items: center;

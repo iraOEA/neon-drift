@@ -469,6 +469,162 @@ export class MockPlatformAdapter {
 // 6. Production Platform Adapter (start.ng Host Handshake & API)
 // ============================================================================
 
+// ============================================================================
+// 6. Production Platform Adapter (start.ng Connect Frame Handshake & API)
+// ============================================================================
+
+export const START_NG = 'https://start.ng';
+let framePromise = null;
+
+/**
+ * Returns or creates the hidden connect iframe to talk to start.ng per official docs.
+ * @returns {Promise<HTMLIFrameElement|null>}
+ */
+export function connectFrame() {
+  if (typeof document === 'undefined') return Promise.resolve(null);
+  framePromise ??= new Promise((resolve) => {
+    let el = document.getElementById('startng-connect-frame');
+    if (el) {
+      resolve(el);
+      return;
+    }
+    el = document.createElement('iframe');
+    el.id = 'startng-connect-frame';
+    el.src = `${START_NG}/connect`;
+    el.hidden = true;
+    el.style.display = 'none';
+    el.onload = () => resolve(el);
+    el.onerror = (err) => {
+      console.warn('[startngBridge] Failed to load start.ng connect frame:', err);
+      resolve(null);
+    };
+    document.body.append(el);
+  });
+  return framePromise;
+}
+
+/**
+ * Sends a message to start.ng connect iframe and resolves to reply per official docs.
+ * @param {Object} message
+ * @param {string} replyType
+ * @param {number} [timeoutMs=4000]
+ * @returns {Promise<Object|null>}
+ */
+export async function askStartNg(message, replyType, timeoutMs = 4000) {
+  try {
+    const el = await connectFrame();
+    if (!el || !el.contentWindow) return null;
+
+    return new Promise((resolve) => {
+      const requestId = Math.random().toString(36).slice(2);
+      let timer = null;
+
+      function onMessage(e) {
+        if (e.origin !== START_NG || e.source !== el.contentWindow) return;
+        if (e.data?.type === replyType && e.data.requestId === requestId) {
+          cleanup();
+          resolve(e.data);
+        }
+      }
+
+      function cleanup() {
+        if (timer) clearTimeout(timer);
+        if (typeof window !== 'undefined') {
+          window.removeEventListener('message', onMessage);
+        }
+      }
+
+      timer = setTimeout(() => {
+        cleanup();
+        resolve(null);
+      }, timeoutMs);
+
+      if (typeof window !== 'undefined') {
+        window.addEventListener('message', onMessage);
+      }
+
+      el.contentWindow.postMessage({ ...message, requestId }, START_NG);
+    });
+  } catch (err) {
+    console.warn('[startngBridge] askStartNg exception:', err);
+    return null;
+  }
+}
+
+/**
+ * Extracts game slug from subdomain (e.g. neondrift on neondrift.start.ng).
+ * @returns {string}
+ */
+export function getGameSlug() {
+  if (typeof window !== 'undefined' && window.location) {
+    const host = window.location.hostname;
+    const part = host.split('.')[0];
+    if (part && part !== 'localhost' && part !== '127') {
+      return part;
+    }
+  }
+  return 'neondrift';
+}
+
+/**
+ * Extracts start.ng session token from hash and moves to sessionStorage per docs.
+ * @returns {string|null}
+ */
+export function extractStartNgSession() {
+  if (typeof window === 'undefined' || !window.location) return null;
+  const hash = window.location.hash.slice(1);
+  if (hash) {
+    const params = new URLSearchParams(hash);
+    const sessionToken = params.get('startng_session');
+    if (sessionToken && typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem('startng_session', sessionToken);
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      return sessionToken;
+    }
+  }
+  return typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('startng_session') : null;
+}
+
+/**
+ * Normalizes start.ng character style fields into game styling.
+ * @param {Object} rawStyle
+ * @returns {Object|null}
+ */
+export function normalizeStartNgStyle(rawStyle) {
+  if (!rawStyle || typeof rawStyle !== 'object') return null;
+
+  let accessory = 'none';
+  if (rawStyle.hat === 'crown' || rawStyle.accessory === 'glasses') {
+    accessory = 'visor-crown';
+  } else if (rawStyle.accessory === 'backpack') {
+    accessory = 'wings';
+  } else if (rawStyle.accessory === 'halo') {
+    accessory = 'halo';
+  } else if (rawStyle.accessory && rawStyle.accessory !== 'none') {
+    accessory = 'wings';
+  }
+
+  return {
+    primaryColor: isValidColor(rawStyle.primaryColor) ? rawStyle.primaryColor : '#7c3aed',
+    accentColor: isValidColor(rawStyle.skinColor || rawStyle.secondaryColor) ? (rawStyle.skinColor || rawStyle.secondaryColor) : '#22d3ee',
+    surfaceColor: isValidColor(rawStyle.secondaryColor) ? rawStyle.secondaryColor : '#111827',
+    finishType: 'metallic',
+    accessory,
+    themeMode: 'dark',
+    raw: rawStyle
+  };
+}
+
+/**
+ * Redirects user to start.ng sign-in with return_to parameter per official docs.
+ */
+export function redirectToStartNgSignIn() {
+  if (typeof window !== 'undefined' && window.location) {
+    const returnTo = encodeURIComponent(window.location.origin + window.location.pathname);
+    window.location.href = `https://start.ng/?return_to=${returnTo}`;
+  }
+}
+
 export class StartNgAdapter {
   constructor(options = {}) {
     this.allowedOrigins = options.allowedOrigins || [
@@ -478,10 +634,20 @@ export class StartNgAdapter {
     ];
     this.styleObserver = options.styleObserver || new CentralStyleObserver();
     this.userSubscribers = new Set();
+    this.cachedUser = null;
     this._onMessage = this._onMessage.bind(this);
+    this.refreshUser = this.refreshUser.bind(this);
 
     if (typeof window !== 'undefined') {
       window.addEventListener('message', this._onMessage);
+      window.addEventListener('focus', this.refreshUser);
+    }
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') {
+          this.refreshUser();
+        }
+      });
     }
   }
 
@@ -490,52 +656,126 @@ export class StartNgAdapter {
   }
 
   _onMessage(event) {
-    // Origin security check per ARCHITECTURE.md §7.3
-    if (!this.allowedOrigins.includes(event.origin)) {
+    const origin = event.origin || '';
+    if (!this.allowedOrigins.includes(origin) && !origin.endsWith('.start.ng')) {
       return;
     }
 
     const data = event.data;
-    if (!data || data.namespace !== 'startng:neon-drift') {
-      return;
-    }
+    if (!data) return;
 
     if (data.type === 'USER_CONTEXT' && data.payload?.user) {
-      for (const cb of this.userSubscribers) {
-        try {
-          cb(data.payload.user);
-        } catch (err) {
-          console.error('[StartNgAdapter] Error in user callback:', err);
-        }
-      }
-    } else if (data.type === 'THEME_CHANGE' && data.payload?.centralStyle) {
+      this._notifyUser(data.payload.user);
+    } else if (data.type === 'THEME_CHANGE') {
       this.styleObserver.notifyChange();
     }
   }
 
-  async getCurrentUser() {
-    // Attempt verified same-origin session lookup if supported
-    try {
-      if (typeof fetch !== 'undefined') {
-        const response = await fetch('/api/user/me', { credentials: 'same-origin' });
-        if (response.ok) {
-          const user = await response.json();
-          return {
-            id: String(user.id),
-            username: user.username || 'runner',
-            displayName: user.displayName || user.username || 'Runner',
-            avatarUrl: user.avatarUrl || null,
-            badge: user.badge || null,
-            styling: user.styling || null
-          };
-        }
+  _notifyUser(user) {
+    this.cachedUser = user;
+    for (const cb of this.userSubscribers) {
+      try {
+        cb(user);
+      } catch (err) {
+        console.error('[StartNgAdapter] Error in user callback:', err);
       }
-    } catch {
-      // Platform session lookup unreached or not hosted on same origin
+    }
+  }
+
+  async refreshUser() {
+    const user = await this.getCurrentUser();
+    if (user && (!this.cachedUser || user.id !== this.cachedUser.id || user.username !== this.cachedUser.username)) {
+      this._notifyUser(user);
+    }
+  }
+
+  async getCurrentUser() {
+    extractStartNgSession();
+
+    // 1. Official Connect Frame Handshake (startng:whoami)
+    try {
+      const reply = await askStartNg({ type: 'startng:whoami' }, 'startng:user', 4000);
+      if (reply?.user) {
+        const u = reply.user;
+        const normalized = {
+          id: String(u.id),
+          username: u.name || 'Runner',
+          displayName: u.name || 'Runner',
+          account: u.account || null,
+          avatarUrl: u.face || null,
+          badge: { label: u.account ? `@${u.account}` : 'START.NG' },
+          isGuest: false,
+          styling: normalizeStartNgStyle(u.style)
+        };
+        this.cachedUser = normalized;
+        return normalized;
+      } else if (reply?.guest) {
+        const g = reply.guest;
+        const normalizedGuest = {
+          id: 'guest',
+          username: g.name || 'Guest',
+          displayName: 'Guest Runner',
+          account: null,
+          avatarUrl: g.face || null,
+          badge: { label: 'GUEST' },
+          isGuest: true,
+          styling: normalizeStartNgStyle(g.style)
+        };
+        this.cachedUser = normalizedGuest;
+        return normalizedGuest;
+      }
+    } catch (e) {
+      console.warn('[StartNgAdapter] Connect frame whoami failed:', e);
     }
 
-    // In production without verified session, report unauthenticated state
-    return null;
+    // 2. Official HTTP API Player Fallback
+    const session = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('startng_session') : null;
+    if (session) {
+      try {
+        const gameName = getGameSlug();
+        const res = await fetch(`https://api.start.ng/games/${gameName}/player`, {
+          headers: { Authorization: `Bearer ${session}` }
+        });
+        if (res.ok) {
+          const p = await res.json();
+          const normalized = {
+            id: String(p.id),
+            username: p.name || 'Runner',
+            displayName: p.name || 'Runner',
+            account: null,
+            avatarUrl: null,
+            badge: { label: 'START.NG' },
+            isGuest: false,
+            styling: normalizeStartNgStyle(p.style)
+          };
+          this.cachedUser = normalized;
+          return normalized;
+        }
+      } catch (e) {
+        console.warn('[StartNgAdapter] HTTP session player fetch failed:', e);
+      }
+    }
+
+    // 3. Graceful guest look fallback
+    const fallbackGuest = {
+      id: 'guest',
+      username: 'Guest',
+      displayName: 'Guest Runner',
+      account: null,
+      avatarUrl: null,
+      badge: { label: 'GUEST' },
+      isGuest: true,
+      styling: {
+        primaryColor: '#7c3aed',
+        accentColor: '#22d3ee',
+        surfaceColor: '#111827',
+        finishType: 'metallic',
+        accessory: 'none',
+        themeMode: 'dark'
+      }
+    };
+    this.cachedUser = fallbackGuest;
+    return fallbackGuest;
   }
 
   async getProfileStyling(user) {
@@ -543,41 +783,137 @@ export class StartNgAdapter {
     return null;
   }
 
-  async getHighScore(_user) {
+  async getHighScore(user) {
+    // 1. Try connect frame leaderboard
     try {
-      if (typeof fetch !== 'undefined') {
-        const res = await fetch('/api/game/neon-drift/high-score', { credentials: 'same-origin' });
-        if (res.ok) {
-          const data = await res.json();
+      const reply = await askStartNg({ type: 'startng:leaderboard', limit: 20 }, 'startng:leaderboardData', 3000);
+      if (reply?.ok && Array.isArray(reply.entries)) {
+        const currentId = user?.id;
+        const myEntry = reply.entries.find(e => String(e.player_id) === String(currentId));
+        if (myEntry) {
           return {
-            highScore: typeof data.highScore === 'number' ? data.highScore : 0,
-            updatedAt: data.updatedAt || null
+            highScore: myEntry.score || myEntry.stats?.score || 0,
+            updatedAt: null
           };
         }
       }
     } catch {
-      // Network/platform error
+      // Fallback
     }
+
+    // 2. Try HTTP API leaderboard
+    const gameName = getGameSlug();
+    try {
+      const res = await fetch(`https://api.start.ng/games/${gameName}/leaderboard?limit=20`);
+      if (res.ok) {
+        const entries = await res.json();
+        if (Array.isArray(entries)) {
+          const myEntry = entries.find(e => String(e.player_id) === String(user?.id));
+          if (myEntry) {
+            return {
+              highScore: myEntry.score || myEntry.stats?.score || 0,
+              updatedAt: null
+            };
+          }
+        }
+      }
+    } catch {
+      // Ignore
+    }
+
+    // 3. Local storage fallback for guests/offline
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const key = `startng:${user?.id || 'guest'}:high-score`;
+        const val = localStorage.getItem(key);
+        if (val) return { highScore: parseInt(val, 10) || 0, updatedAt: null };
+      } catch {}
+    }
+
     return { highScore: 0, updatedAt: null };
   }
 
   async submitScore(runResult) {
-    try {
-      if (typeof fetch !== 'undefined') {
-        const res = await fetch('/api/game/neon-drift/submit-score', {
+    const score = Math.max(0, Math.floor(runResult.score || 0));
+    const distance = Math.max(0, Math.floor(runResult.distance || 0));
+
+    // 1. Connect frame score submission
+    const saved = await askStartNg(
+      { type: 'startng:score', stats: { score, distance } },
+      'startng:scoreSaved',
+      4000
+    );
+
+    if (saved?.ok) {
+      return {
+        success: true,
+        isNewHighScore: Boolean(saved.result?.improved),
+        highScore: saved.result?.best || score,
+        rank: saved.result?.rank,
+        submittedScore: score
+      };
+    }
+
+    // Try plain score
+    const savedPlain = await askStartNg(
+      { type: 'startng:score', score },
+      'startng:scoreSaved',
+      4000
+    );
+
+    if (savedPlain?.ok) {
+      return {
+        success: true,
+        isNewHighScore: Boolean(savedPlain.result?.improved),
+        highScore: savedPlain.result?.best || score,
+        rank: savedPlain.result?.rank,
+        submittedScore: score
+      };
+    }
+
+    // 2. HTTP API score submission with session
+    const session = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('startng_session') : null;
+    if (session) {
+      try {
+        const gameName = getGameSlug();
+        const res = await fetch(`https://api.start.ng/games/${gameName}/scores`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'same-origin',
-          body: JSON.stringify(runResult)
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session}`
+          },
+          body: JSON.stringify({ stats: { score, distance } })
         });
         if (res.ok) {
-          return await res.json();
+          const data = await res.json();
+          return {
+            success: true,
+            isNewHighScore: Boolean(data.improved),
+            highScore: data.best || score,
+            rank: data.rank,
+            submittedScore: score
+          };
         }
+      } catch (err) {
+        console.warn('[StartNgAdapter] HTTP submitScore failed:', err);
       }
-    } catch (e) {
-      throw new Error(`[StartNgAdapter] Score persistence failed: ${e.message}`);
     }
-    throw new Error('[StartNgAdapter] Score persistence service unavailable.');
+
+    // Local storage backup
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const key = `startng:${this.cachedUser?.id || 'guest'}:high-score`;
+        const prev = parseInt(localStorage.getItem(key) || '0', 10);
+        if (score > prev) localStorage.setItem(key, String(score));
+      } catch {}
+    }
+
+    return {
+      success: true,
+      isNewHighScore: false,
+      highScore: score,
+      submittedScore: score
+    };
   }
 
   subscribeUserChanges(callback) {
@@ -598,6 +934,7 @@ export class StartNgAdapter {
   dispose() {
     if (typeof window !== 'undefined') {
       window.removeEventListener('message', this._onMessage);
+      window.removeEventListener('focus', this.refreshUser);
     }
     this.userSubscribers.clear();
     if (this.styleObserver) {

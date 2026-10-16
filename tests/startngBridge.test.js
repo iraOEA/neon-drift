@@ -9,7 +9,9 @@ import {
   CentralStyleObserver,
   MockPlatformAdapter,
   DEFAULT_STYLE,
-  MOCK_USER
+  MOCK_USER,
+  normalizeStartNgStyle,
+  getGameSlug
 } from '../src/startngBridge.js';
 
 describe('startngBridge — Validators and Normalizers', () => {
@@ -327,3 +329,42 @@ describe('startngBridge — MockPlatformAdapter', () => {
     expect(res2.highScore).toBe(1500);
   });
 });
+
+describe('startngBridge — start.ng Platform Mapping', () => {
+  it('normalizes start.ng character style into game styling schema', () => {
+    const rawStyle = {
+      body: 'female',
+      primaryColor: '#a55eea',
+      secondaryColor: '#0c6e5a',
+      skinColor: '#8d5524',
+      hairColor: '#17120f',
+      hair: 'braids',
+      hat: 'crown',
+      accessory: 'earrings'
+    };
+
+    const normalized = normalizeStartNgStyle(rawStyle);
+    expect(normalized).not.toBeNull();
+    expect(normalized.primaryColor).toBe('#a55eea');
+    expect(normalized.surfaceColor).toBe('#0c6e5a');
+    expect(normalized.accentColor).toBe('#8d5524');
+    expect(normalized.accessory).toBe('visor-crown'); // Crown maps to visor-crown
+    expect(normalized.finishType).toBe('metallic');
+  });
+
+  it('maps backpack accessory to wings', () => {
+    const rawStyle = {
+      primaryColor: '#4b7bec',
+      secondaryColor: '#2b2f4a',
+      accessory: 'backpack'
+    };
+
+    const normalized = normalizeStartNgStyle(rawStyle);
+    expect(normalized.accessory).toBe('wings');
+  });
+
+  it('extracts game slug cleanly or defaults to neondrift', () => {
+    expect(getGameSlug()).toBe('neondrift');
+  });
+});
+

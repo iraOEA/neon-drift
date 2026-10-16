@@ -11,7 +11,8 @@ import {
   normalizeAccessory,
   normalizeTheme,
   ACCESSORY_TYPES,
-  FINISH_TYPES
+  FINISH_TYPES,
+  redirectToStartNgSignIn
 } from './startngBridge.js';
 
 /**
@@ -60,7 +61,7 @@ export function isMobileOrTouch() {
 /**
  * Curated Roster of Distinct Running Character Avatars
  */
-export const CHARACTER_ROSTER = Object.freeze([
+export const CHARACTER_ROSTER = [
   {
     id: 'cyber-scout',
     name: 'CYBER SCOUT',
@@ -115,7 +116,7 @@ export const CHARACTER_ROSTER = Object.freeze([
     primaryColor: '#ea580c',
     accentColor: '#fde047'
   }
-]);
+];
 
 /**
  * UIManager orchestrates DOM HUD elements, screen overlays, character avatar selection, and the Central Style Simulator.
@@ -337,13 +338,51 @@ export class UIManager {
     nameEl.textContent = user.displayName || user.username || 'Runner';
     this.userPillEl.appendChild(nameEl);
 
-    // 3. Optional platform badge (e.g. DEV, PRO, VIP)
+    // 2b. Platform account handle (@name)
+    if (user.account) {
+      const accountEl = document.createElement('span');
+      accountEl.className = 'user-account';
+      accountEl.style.fontSize = '0.75rem';
+      accountEl.style.opacity = '0.7';
+      accountEl.style.marginLeft = '4px';
+      accountEl.textContent = `@${user.account}`;
+      this.userPillEl.appendChild(accountEl);
+    }
+
+    // 3. Optional platform badge (e.g. DEV, PRO, VIP, @account)
     const badgeLabel = user.badge?.label || (this.isDevMode ? 'DEV' : null);
     if (badgeLabel) {
       const badgeEl = document.createElement('span');
       badgeEl.className = 'user-badge';
       badgeEl.textContent = badgeLabel;
       this.userPillEl.appendChild(badgeEl);
+    }
+
+    // If guest, provide Sign in button in header
+    if (user.isGuest) {
+      const signBtn = document.createElement('button');
+      signBtn.className = 'pill-signin-btn';
+      signBtn.textContent = 'Sign in';
+      signBtn.onclick = (e) => {
+        e.stopPropagation();
+        redirectToStartNgSignIn();
+      };
+      this.userPillEl.appendChild(signBtn);
+    }
+
+    // 4. Dynamically update START.NG RUNNER in character roster with authenticated styling
+    if (user.styling && CHARACTER_ROSTER[0]) {
+      const s = user.styling;
+      CHARACTER_ROSTER[0].name = (user.displayName || user.username || 'START.NG RUNNER').toUpperCase();
+      CHARACTER_ROSTER[0].badge = user.isGuest ? 'GUEST RUNNER • START.NG' : 'AUTHENTIC • START.NG';
+      if (s.primaryColor) CHARACTER_ROSTER[0].primaryColor = s.primaryColor;
+      if (s.accentColor) CHARACTER_ROSTER[0].accentColor = s.accentColor;
+      if (s.accessory) CHARACTER_ROSTER[0].accessory = s.accessory;
+      if (s.finishType) CHARACTER_ROSTER[0].finishType = s.finishType;
+
+      if (this.selectedCharacterIndex === 0) {
+        this.applySelectedCharacter();
+      }
     }
   }
 
@@ -455,6 +494,13 @@ export class UIManager {
                 ${startLabel}
               </button>
 
+              ${this.app?.currentUser?.isGuest ? `
+                <button id="startng-signin-btn" type="button" class="btn-ghost" style="padding: 10px 20px; font-size: 0.88rem; width: 100%; margin-bottom: 14px; background: rgba(255,255,255,0.06); color: var(--nd-text-main); border: 1px solid var(--nd-card-border); font-weight: 600; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                  <span style="display:inline-block; width:12px; height:12px; border-radius:50%; background: #d8fd71; border: 1.5px solid #292a23;"></span>
+                  Sign in with start.ng
+                </button>
+              ` : ''}
+
               <div class="controls-guide" style="font-size: 0.78rem; color: var(--nd-text-muted); line-height: 1.6; border-top: 1px solid var(--nd-card-border); padding-top: 12px;">
                 ${controlsGuide}
               </div>
@@ -470,6 +516,17 @@ export class UIManager {
             };
             startBtn.addEventListener('click', onStart);
             startBtn.addEventListener('touchend', onStart);
+          }
+
+          const signinBtn = document.getElementById('startng-signin-btn');
+          if (signinBtn) {
+            const onSignIn = (e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              redirectToStartNgSignIn();
+            };
+            signinBtn.addEventListener('click', onSignIn);
+            signinBtn.addEventListener('touchend', onSignIn);
           }
 
           const prevBtn = document.getElementById('char-prev-btn');

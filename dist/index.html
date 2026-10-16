@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Neon Drift — 3D Cyber-Runner</title>
+  <meta name="description" content="Neon Drift — A high-octane 3D endless cyber-runner with dynamic Central Styling for start.ng" />
+
+  <!-- Open Graph / Facebook / Discord / Slack / LinkedIn -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://neondrift.start.ng/" />
+  <meta property="og:title" content="Neon Drift — 3D Cyber-Runner" />
+  <meta property="og:description" content="A high-octane 3D endless cyber-runner with dynamic Central Styling for start.ng" />
+  <meta property="og:image" content="https://neondrift.start.ng/cover.png" />
+  <meta property="og:image:secure_url" content="https://neondrift.start.ng/cover.png" />
+  <meta property="og:image:type" content="image/png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="750" />
+  <meta property="og:image:alt" content="Neon Drift character running in center lane with default metallic finish" />
+
+  <!-- Twitter / X -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta property="twitter:url" content="https://neondrift.start.ng/" />
+  <meta name="twitter:title" content="Neon Drift — 3D Cyber-Runner" />
+  <meta name="twitter:description" content="A high-octane 3D endless cyber-runner with dynamic Central Styling for start.ng" />
+  <meta name="twitter:image" content="https://neondrift.start.ng/cover.png" />
+  <meta name="twitter:image:alt" content="Neon Drift character running in center lane with default metallic finish" />
+
+  <link rel="image_src" href="./preview.png" />
+  <script type="module" crossorigin src="./assets/index-BVAZ3Vpl.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-NwiM5X56.css">
+</head>
+<body>
+  <div id="game-app" data-theme="dark">
+    <div id="game-stage" aria-label="Neon Drift game">
+      <canvas id="game-canvas" aria-label="3D game scene"></canvas>
+
+      <div id="game-ui">
+        <header id="hud-top" aria-label="Game status">
+          <section id="user-pill" aria-label="Signed-in start.ng user"></section>
+          <section id="score-card" aria-label="Score">
+            <span id="score-value">0</span>
+            <span id="collectible-value">0</span>
+            <span id="high-score-value">—</span>
+            <button id="pause-button" type="button">Pause</button>
+          </section>
+        </header>
+
+        <section id="loading-screen" aria-live="polite"></section>
+        <section id="ready-screen" aria-labelledby="game-title"></section>
+        <section id="pause-screen" aria-labelledby="pause-title" hidden></section>
+        <section id="game-over-screen" aria-labelledby="game-over-title" hidden></section>
+        <section id="error-screen" role="alert" hidden></section>
+      </div>
+    </div>
+
+    <aside id="style-simulator" aria-label="Central Style Simulator" hidden></aside>
+  </div>
+
+</body>
+</html>
