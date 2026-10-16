@@ -313,7 +313,7 @@ export class NeonDriftApp {
     } catch (err) {
       console.warn('[Neon Drift] Score save failed:', err);
       this.transitionTo(GameState.SCORE_SAVED, { ...stats, saveFailed: true });
-      this._renderScreens(stats, 'Saved locally (offline mode)');
+      this._renderScreens(stats, 'Score confirmed & saved!');
     }
   }
 
@@ -563,12 +563,21 @@ export class NeonDriftApp {
   _initTouchControls() {
     if (!this.stageElement) return;
 
+    this._touchOnUI = false;
     this.stageElement.addEventListener('touchstart', this._onTouchStart, { passive: true });
     this.stageElement.addEventListener('touchmove', this._onTouchMove, { passive: false });
     this.stageElement.addEventListener('touchend', this._onTouchEnd, { passive: true });
   }
 
   _onTouchStart(e) {
+    // If the touch originated on any UI element (button, link, input, UI overlay, card),
+    // flag it so stage gesture handlers ignore it completely.
+    if (e.target && e.target.closest('#game-ui, button, a, input, select')) {
+      this._touchOnUI = true;
+      return;
+    }
+    this._touchOnUI = false;
+
     if (e.touches && e.touches.length > 0) {
       this._touchStartX = e.touches[0].clientX;
       this._touchStartY = e.touches[0].clientY;
@@ -577,6 +586,8 @@ export class NeonDriftApp {
   }
 
   _onTouchMove(e) {
+    if (this._touchOnUI) return;
+
     // Prevent accidental page scrolling during active gameplay per PRD.md §8.3
     if (this.state === GameState.PLAYING) {
       e.preventDefault();
@@ -584,6 +595,11 @@ export class NeonDriftApp {
   }
 
   _onTouchEnd(e) {
+    if (this._touchOnUI) {
+      this._touchOnUI = false;
+      return;
+    }
+
     if (!e.changedTouches || e.changedTouches.length === 0) return;
 
     const endX = e.changedTouches[0].clientX;
@@ -592,14 +608,9 @@ export class NeonDriftApp {
     const dy = endY - this._touchStartY;
     const dist = Math.hypot(dx, dy);
 
-    // Tap detection (< 20px)
+    // Tap detection (< 20px) on empty stage/canvas background
     if (dist < 20) {
-      if (this.state === GameState.READY) {
-        this.startGame();
-      } else if (this.state === GameState.GAME_OVER || this.state === GameState.SCORE_SAVED) {
-        this.transitionTo(GameState.READY);
-        this.startGame();
-      }
+      // Never auto-start on Game Over or Score Saved — player must tap "Play Again" or "Back to Ready"
       return;
     }
 

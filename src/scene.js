@@ -45,10 +45,19 @@ export class GameScene {
     this.cameraFollowSmoothing = 6.0;
 
     // Pre-allocated vectors for zero-allocation camera lerping
-    this._desiredCameraPos = new THREE.Vector3(0, 4.3, 8.2);
+    this._cameraOffset = new THREE.Vector3(0, 4.3, 8.2);
+    if (aspect < 0.75) {
+      this.camera.fov = 70;
+      this._cameraOffset.set(0, 5.0, 10.6);
+    } else if (aspect < 1.1) {
+      this.camera.fov = 60;
+      this._cameraOffset.set(0, 4.6, 9.2);
+    }
+    this.camera.updateProjectionMatrix();
+
+    this._desiredCameraPos = this._cameraOffset.clone();
     this._desiredLookTarget = new THREE.Vector3(0, 1.1, -5.0);
     this._currentLookTarget = new THREE.Vector3(0, 1.1, -5.0);
-    this._cameraOffset = new THREE.Vector3(0, 4.3, 8.2);
 
     this.camera.position.copy(this._desiredCameraPos);
     this.camera.lookAt(this._currentLookTarget);
@@ -266,7 +275,24 @@ export class GameScene {
   resize(width, height, pixelRatio) {
     if (!width || !height) return;
 
-    this.camera.aspect = width / height;
+    const aspect = width / height;
+    this.camera.aspect = aspect;
+
+    // Adapt FOV and camera offset for portrait / mobile screens so all 3 lanes are clearly visible and not zoomed in
+    if (aspect < 0.75) {
+      // Narrow mobile portrait: widen FOV & move camera back for a clear, un-zoomed view of the track
+      this.camera.fov = 70;
+      this._cameraOffset.set(0, 5.0, 10.6);
+    } else if (aspect < 1.1) {
+      // Square-ish / tablet
+      this.camera.fov = 60;
+      this._cameraOffset.set(0, 4.6, 9.2);
+    } else {
+      // Standard landscape / desktop
+      this.camera.fov = 52;
+      this._cameraOffset.set(0, 4.3, 8.2);
+    }
+
     this.camera.updateProjectionMatrix();
 
     const pr = Math.min(pixelRatio || window.devicePixelRatio || 1, this.config.pixelRatioCap || 2);

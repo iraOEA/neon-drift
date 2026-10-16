@@ -446,6 +446,68 @@ button:focus-visible {
     padding: 6px 12px;
     font-size: 0.78rem;
   }
+
+  /* Center overlays and card scaling on mobile */
+  .ready-card,
+  .game-over-card,
+  .pause-card,
+  .error-card {
+    width: calc(100vw - 32px) !important;
+    max-width: 350px !important;
+    padding: 16px 18px !important;
+    margin: 0 auto;
+  }
+
+  .game-logo {
+    font-size: 1.6rem !important;
+    letter-spacing: 1.5px !important;
+    margin-bottom: 2px !important;
+  }
+
+  .character-selector-card {
+    margin-bottom: 12px !important;
+    padding: 8px 10px !important;
+  }
+
+  .char-name {
+    font-size: 0.98rem !important;
+  }
+
+  .char-badge {
+    font-size: 0.7rem !important;
+  }
+
+  .char-nav-btn {
+    width: 42px !important;
+    height: 42px !important;
+    min-height: 42px !important;
+    font-size: 1.2rem !important;
+    touch-action: manipulation;
+  }
+
+  .btn-primary {
+    padding: 11px 20px !important;
+    font-size: 0.95rem !important;
+    margin-bottom: 10px !important;
+    touch-action: manipulation;
+  }
+
+  .controls-guide {
+    font-size: 0.72rem !important;
+    line-height: 1.45 !important;
+    padding-top: 8px !important;
+  }
+
+  .stats-grid {
+    gap: 8px !important;
+    padding: 10px 12px !important;
+    font-size: 0.85rem !important;
+    margin-bottom: 12px !important;
+  }
+
+  .stats-grid strong {
+    font-size: 1.05rem !important;
+  }
 }
 
 /* Accessibility & Reduced Motion */

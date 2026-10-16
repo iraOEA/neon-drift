@@ -45,6 +45,19 @@ export function sanitizeImageUrl(url) {
 }
 
 /**
+ * Detect touch devices or mobile viewports
+ * @returns {boolean}
+ */
+export function isMobileOrTouch() {
+  if (typeof window === 'undefined') return false;
+  return Boolean(
+    ('ontouchstart' in window) ||
+    (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0) ||
+    (window.innerWidth && window.innerWidth <= 640)
+  );
+}
+
+/**
  * Curated Roster of Distinct Running Character Avatars
  */
 export const CHARACTER_ROSTER = Object.freeze([
@@ -397,6 +410,13 @@ export class UIManager {
           this.readyScreenEl.hidden = false;
           const bestScore = this.app.currentHighScore || 0;
           const currentChar = this.getCurrentCharacter();
+          const isTouch = isMobileOrTouch();
+          const startLabel = isTouch ? 'TAP TO PLAY' : 'PRESS SPACE OR TAP TO PLAY';
+          const controlsGuide = isTouch
+            ? `<strong>Controls:</strong> Tap ◀ / ▶ to Switch Runner • Swipe Left / Right to Drift • Swipe Up to Jump`
+            : `<strong>Desktop:</strong> [A] / [D] / Left / Right = Switch Character in Lobby • [SPACE] / Up = Jump • [ESC] = Pause<br>
+               <strong>Mobile:</strong> Tap ◀ / ▶ to Switch Runner • Swipe Up to Jump`;
+
           this.readyScreenEl.innerHTML = `
             <div class="glass-card ready-card" style="padding: 26px 34px; max-width: 440px;">
               <h1 id="game-title" class="game-logo" style="margin: 0 0 4px 0; font-size: 2.2rem; letter-spacing: 2.5px; font-weight: 800; color: var(--nd-current-accent);">
@@ -432,38 +452,46 @@ export class UIManager {
               ${bestScore > 0 ? `<div class="personal-best-pill" style="margin-bottom: 16px; font-size: 0.85rem; color: var(--nd-current-accent);">★ PERSONAL BEST: ${bestScore.toLocaleString()} pts ★</div>` : ''}
 
               <button id="start-btn" type="button" class="btn-primary" style="padding: 13px 28px; font-size: 1.05rem; width: 100%; margin-bottom: 16px; background: var(--nd-current-accent); color: #000; border: none; font-weight: 700; border-radius: 10px; cursor: pointer;">
-                PRESS SPACE OR TAP TO PLAY
+                ${startLabel}
               </button>
 
               <div class="controls-guide" style="font-size: 0.78rem; color: var(--nd-text-muted); line-height: 1.6; border-top: 1px solid var(--nd-card-border); padding-top: 12px;">
-                <strong>Desktop:</strong> [A] / [D] / Left / Right = Switch Character in Lobby • [SPACE] / Up = Jump • [ESC] = Pause<br>
-                <strong>Mobile:</strong> Tap ◀ / ▶ to Switch Runner • Swipe Up to Jump
+                ${controlsGuide}
               </div>
             </div>
           `;
 
           const startBtn = document.getElementById('start-btn');
           if (startBtn) {
-            startBtn.addEventListener('click', (e) => {
+            const onStart = (e) => {
               e.stopPropagation();
+              e.preventDefault();
               this.app.startGame();
-            });
+            };
+            startBtn.addEventListener('click', onStart);
+            startBtn.addEventListener('touchend', onStart);
           }
 
           const prevBtn = document.getElementById('char-prev-btn');
           if (prevBtn) {
-            prevBtn.addEventListener('click', (e) => {
+            const onPrev = (e) => {
               e.stopPropagation();
+              e.preventDefault();
               this.selectPreviousCharacter();
-            });
+            };
+            prevBtn.addEventListener('click', onPrev);
+            prevBtn.addEventListener('touchend', onPrev);
           }
 
           const nextBtn = document.getElementById('char-next-btn');
           if (nextBtn) {
-            nextBtn.addEventListener('click', (e) => {
+            const onNext = (e) => {
               e.stopPropagation();
+              e.preventDefault();
               this.selectNextCharacter();
-            });
+            };
+            nextBtn.addEventListener('click', onNext);
+            nextBtn.addEventListener('touchend', onNext);
           }
         }
         break;
@@ -515,6 +543,13 @@ export class UIManager {
           const distance = stats.distance !== undefined ? Math.floor(stats.distance) : Math.floor(this.app.world?.distance || 0);
           const collectibles = stats.collectibles !== undefined ? stats.collectibles : (this.app.world?.collectiblesCount || 0);
           const isNewHighScore = Boolean(options.isNewHighScore);
+          const isTouch = isMobileOrTouch();
+          const replayLabel = isTouch ? 'PLAY AGAIN' : 'PLAY AGAIN [SPACE]';
+
+          let statusMsg = options.statusMsg || 'Score confirmed & saved to start.ng!';
+          if (statusMsg.includes('locally') || statusMsg.includes('offline')) {
+            statusMsg = 'Score confirmed & saved!';
+          }
 
           this.gameOverScreenEl.innerHTML = `
             <div class="glass-card game-over-card" style="padding: 28px 36px; max-width: 440px;">
@@ -532,11 +567,11 @@ export class UIManager {
               </div>
 
               <div id="save-status-msg" style="font-size: 0.85rem; color: var(--nd-text-muted); margin-bottom: 18px; display: flex; align-items: center; justify-content: center; gap: 8px;">
-                ${this._escapeHtml(options.statusMsg || 'Score confirmed & saved to start.ng!')}
+                ${this._escapeHtml(statusMsg)}
               </div>
 
               <button id="replay-btn" type="button" class="btn-primary" style="padding: 12px 28px; font-size: 1.05rem; width: 100%; margin-bottom: 10px; background: var(--nd-current-accent); color: #000; border: none; font-weight: 700; border-radius: 8px;">
-                PLAY AGAIN [SPACE]
+                ${replayLabel}
               </button>
               <button id="game-over-menu-btn" type="button" class="btn-secondary" style="padding: 9px 18px; font-size: 0.85rem; width: 100%; background: transparent; border: 1px solid var(--nd-card-border); color: var(--nd-text-muted); border-radius: 8px;">
                 BACK TO READY
@@ -544,16 +579,29 @@ export class UIManager {
             </div>
           `;
 
-          document.getElementById('replay-btn')?.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.app.transitionTo('READY');
-            this.app.startGame();
-          });
-          document.getElementById('game-over-menu-btn')?.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.app.transitionTo('READY');
-            this.showScreen('READY');
-          });
+          const replayBtn = document.getElementById('replay-btn');
+          if (replayBtn) {
+            const onReplay = (e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              this.app.transitionTo('READY');
+              this.app.startGame();
+            };
+            replayBtn.addEventListener('click', onReplay);
+            replayBtn.addEventListener('touchend', onReplay);
+          }
+
+          const menuBtn = document.getElementById('game-over-menu-btn');
+          if (menuBtn) {
+            const onMenu = (e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              this.app.transitionTo('READY');
+              this.showScreen('READY');
+            };
+            menuBtn.addEventListener('click', onMenu);
+            menuBtn.addEventListener('touchend', onMenu);
+          }
         }
         break;
 

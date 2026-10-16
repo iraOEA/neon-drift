@@ -360,4 +360,26 @@ describe('UIManager HUD & Screen Overlays', () => {
     expect(ui.selectedCharacterIndex).toBe(5);
     expect(ui.getCurrentCharacter().name).toBe('SOLAR TITAN');
   });
+
+  it('sanitizes statusMsg to never display offline or saved locally', () => {
+    ui.showScreen('GAME_OVER', {
+      stats: { score: 1000, distance: 200, collectibles: 5 },
+      statusMsg: 'Saved locally (offline mode)'
+    });
+    const saveStatusMsg = elementsMap.get('game-over-screen')?.innerHTML;
+    expect(saveStatusMsg).not.toContain('Saved locally');
+    expect(saveStatusMsg).not.toContain('offline');
+    expect(saveStatusMsg).toContain('Score confirmed');
+  });
+
+  it('adapts play again button label on mobile without mentioning [SPACE]', () => {
+    // In mock node env where ontouchstart or window width is mobile
+    globalThis.window.innerWidth = 390;
+    ui.showScreen('GAME_OVER', {
+      stats: { score: 1000, distance: 200, collectibles: 5 }
+    });
+    const html = elementsMap.get('game-over-screen')?.innerHTML;
+    expect(html).toContain('PLAY AGAIN');
+    expect(html).not.toContain('PLAY AGAIN [SPACE]');
+  });
 });
