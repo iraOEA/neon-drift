@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="description" content="Neon Drift — A high-octane 3D endless cyber-runner for start.ng" />
+  <title>Neon Drift</title>
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <div id="game-app" data-theme="dark">
+    <div id="game-stage" aria-label="Neon Drift game">
+      <canvas id="game-canvas" aria-label="3D game scene"></canvas>
+
+      <div id="game-ui">
+        <header id="hud-top" aria-label="Game status">
+          <section id="user-pill" aria-label="Signed-in start.ng user"></section>
+          <section id="score-card" aria-label="Score">
+            <span id="score-value">0</span>
+            <span id="collectible-value">0</span>
+            <span id="high-score-value">—</span>
+            <button id="pause-button" type="button">Pause</button>
+          </section>
+        </header>
+
+        <section id="loading-screen" aria-live="polite"></section>
+        <section id="ready-screen" aria-labelledby="game-title"></section>
+        <section id="pause-screen" aria-labelledby="pause-title" hidden></section>
+        <section id="game-over-screen" aria-labelledby="game-over-title" hidden></section>
+        <section id="error-screen" role="alert" hidden></section>
+      </div>
+    </div>
+
+    <aside id="style-simulator" aria-label="Central Style Simulator" hidden></aside>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

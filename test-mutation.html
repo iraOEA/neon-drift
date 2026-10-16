@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neon Drift - Style Mutation Verification</title>
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <div id="game-app" data-theme="dark">
+    <div id="game-stage">
+      <canvas id="game-canvas"></canvas>
+      <div id="game-ui"></div>
+    </div>
+  </div>
+
+  <div id="mutation-results" style="position: absolute; top: 10px; left: 10px; z-index: 9999; color: #fff; font-family: monospace; background: rgba(0,0,0,0.85); padding: 12px; border-radius: 6px;">
+    Testing...
+  </div>
+
+  <script type="module">
+    import app from './src/main.js';
+
+    async function runMutationTest() {
+      const resultsDiv = document.getElementById('mutation-results');
+
+      // Wait until app is ready
+      while (!app || app.state !== 'READY') {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+
+      const initialPrimary = app.character.primaryMaterial.color.getHexString();
+      const initialAccent = app.character.accentMaterial.color.getHexString();
+
+      // Mutate root CSS custom property --startng-primary to #00ff00 (neon green)
+      document.documentElement.style.setProperty('--startng-primary', '#00ff00');
+
+      // Wait 100ms for CentralStyleObserver mutation observer & requestAnimationFrame coalescing
+      await new Promise((r) => setTimeout(r, 100));
+
+      const updatedPrimary = app.character.primaryMaterial.color.getHexString();
+
+      // Mutate --startng-accent to #ff0055 (hot pink)
+      document.documentElement.style.setProperty('--startng-accent', '#ff0055');
+
+      await new Promise((r) => setTimeout(r, 100));
+
+      const updatedAccent = app.character.accentMaterial.color.getHexString();
+
+      const passed = updatedPrimary === '00ff00' && updatedAccent === 'ff0055';
+
+      const report = {
+        passed,
+        initialPrimary,
+        updatedPrimary,
+        initialAccent,
+        updatedAccent,
+        themeMode: app.resolvedStyle.themeMode,
+        sources: app.resolvedStyle.sources
+      };
+
+      document.title = passed ? 'MUTATION_PASSED' : 'MUTATION_FAILED';
+      resultsDiv.innerHTML = `<strong>MUTATION TEST: ${passed ? 'PASSED' : 'FAILED'}</strong><pre id="mutation-data">${JSON.stringify(report, null, 2)}</pre>`;
+      
+      const scriptTag = document.createElement('script');
+      scriptTag.id = 'test-result-json';
+      scriptTag.type = 'application/json';
+      scriptTag.textContent = JSON.stringify(report);
+      document.body.appendChild(scriptTag);
+
+      window.__mutationTestResult = report;
+    }
+
+    runMutationTest();
+  </script>
+</body>
+</html>

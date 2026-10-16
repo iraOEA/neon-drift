@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Neon Drift - Full Gameplay Loop Test</title>
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <div id="game-app" data-theme="dark">
+    <div id="game-stage">
+      <canvas id="game-canvas"></canvas>
+
+      <div id="game-ui">
+        <header id="hud-top">
+          <section id="user-pill"></section>
+          <section id="score-card">
+            <span id="score-value">0</span>
+            <span id="collectible-value">0</span>
+            <span id="high-score-value">—</span>
+            <button id="pause-button" type="button">Pause</button>
+          </section>
+        </header>
+
+        <section id="loading-screen" hidden></section>
+        <section id="ready-screen"></section>
+        <section id="pause-screen" hidden></section>
+        <section id="game-over-screen" hidden></section>
+        <section id="error-screen" hidden></section>
+      </div>
+    </div>
+  </div>
+
+  <div id="gameplay-debug" style="position: absolute; top: 12px; left: 12px; z-index: 99999; color: #00ffcc; font-family: monospace; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 6px;">
+    Starting gameplay loop test...
+  </div>
+
+  <script type="module">
+    import app from './src/main.js';
+
+    async function simulateSeconds(seconds, fps = 60) {
+      const steps = Math.ceil(seconds * fps);
+      const dt = 1 / fps;
+      for (let i = 0; i < steps; i++) {
+        const simulatedNow = (app.previousTime || performance.now()) + dt * 1000;
+        app._frame(simulatedNow);
+        await new Promise((r) => setTimeout(r, 4));
+      }
+    }
+
+    async function runFullGameplayTest() {
+      const debugEl = document.getElementById('gameplay-debug');
+
+      // 1. Wait until Ready
+      while (!app || app.state !== 'READY') {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      debugEl.textContent = 'App Ready. Starting run...';
+
+      // 2. Start game
+      app.startGame();
+      if (app.state !== 'PLAYING') {
+        throw new Error('Failed to transition to PLAYING');
+      }
+
+      // Step forward 15 frames
+      await simulateSeconds(0.25);
+
+      // 3. Move Left and Jump
+      app.character.moveLeft();
+      await simulateSeconds(0.2);
+      app.character.jump();
+
+      // 4. Spawn a collectible in the left lane (lane 0) at Z = -8
+      const item = app.world.collectiblePool.find((c) => !c.active);
+      if (item) {
+        item.spawn(0, -8, 1.0); // Z = -8, moving toward player at Z = 0
+      }
+
+      // Advance ~0.65s (at 18 u/s, item travels ~11.7 units -> crosses Z = 0)
+      await simulateSeconds(0.65);
+
+      const statsAfterCollect = app.world.getScoreStats();
+
+      // 5. Spawn a BLOCK obstacle directly in player lane at Z = -6
+      const currentLane = app.character.currentLane;
+      const barrier = app.world.obstaclePool.find((o) => !o.active && o.type === 'BLOCK');
+      if (barrier) {
+        barrier.spawn(currentLane, -6);
+      }
+
+      // Advance ~0.5s for collision to occur
+      await simulateSeconds(0.5);
+
+      // Wait briefly for async score submission
+      for (let i = 0; i < 20; i++) {
+        if (app.state === 'SCORE_SAVED') break;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+
+      const finalState = app.state;
+      const finalStats = app.world.getScoreStats();
+
+      const passed =
+        statsAfterCollect.collectibles >= 1 &&
+        (finalState === 'SCORE_SAVED' || finalState === 'GAME_OVER') &&
+        finalStats.score > 0;
+
+      const report = {
+        passed,
+        finalState,
+        score: finalStats.score,
+        distance: Math.floor(finalStats.distance),
+        collectibles: finalStats.collectibles,
+        highScore: app.currentHighScore
+      };
+
+      debugEl.innerHTML = `<strong>FULL ROUND TEST: ${passed ? 'PASSED' : 'FAILED'}</strong><pre>${JSON.stringify(report, null, 2)}</pre>`;
+      window.__gameplayTestReport = report;
+
+      const tag = document.createElement('script');
+      tag.id = 'gameplay-result-json';
+      tag.type = 'application/json';
+      tag.textContent = JSON.stringify(report);
+      document.body.appendChild(tag);
+    }
+
+    runFullGameplayTest().catch((err) => {
+      console.error(err);
+      document.getElementById('gameplay-debug').textContent = 'ERROR: ' + err.message;
+    });
+  </script>
+</body>
+</html>
